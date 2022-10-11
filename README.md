@@ -1,1 +1,1 @@
-# Dimensionality-Reduction-Project
+# Dimensionality Reduction and clustering Project
