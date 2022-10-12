@@ -1,0 +1,566 @@
+---
+title: "Dimensionality Reduction and Clustering Techniques"
+author: "MEENOWA Sarvesh"
+date: "17/11/2021"
+output:
+  pdf_document: default
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,warning = FALSE,message=FALSE)
+```
+
+Import important libraries
+```{r}
+library('car')
+library("readr")
+library("ggpubr")
+library("corrplot")
+library("FactoMineR")
+library("vcd")
+library("moments")
+library("ggplot2")
+library("FactoMineR")
+library("factoextra")
+library("tidyverse")
+library("ClustOfVar")
+library("ClusterR")
+library("cluster")
+library("RColorBrewer")
+library("scales")
+library("ggdendro")
+library("NbClust")
+library("igraph")
+library("ggraph")
+library("GGally")
+library("plotly")
+library("PerformanceAnalytics")
+library("xtable")
+
+```
+
+
+```{r}
+#import dataset
+df = read_csv("H:/Downloads/Datatsets/users.db.csv")
+head(df)
+
+colnames(df)
+
+```
+```{r}
+#calculate log of variables and add them to df
+df$score_log <- log10(df$score)
+df$n.matches_log <- log10(df$n.matches)
+df$n.photos_log <- log10(df$n.photos)
+
+```
+
+
+```{r}
+#create continuous dataset by subsetting continuous variables
+df_cont <- df[c('score', 'n.matches', 'n.updates.photo', 'n.photos')]
+head(df_cont)
+```
+## Identifying correlations
+Search for correlations among (cor.test). Use both parametric and non-parametric
+techniques (Pearson vs. Spearman for correlation between continuous variables).
+Design a couple of plots featuring correlated variables
+
+```{r}
+# check qqplot for score 
+ggqqplot(df$score, ylab = "score")
+
+```
+
+
+
+```{r}
+# check qqplot for n.matches
+ggqqplot(df$n.matches, ylab = "Number of matches")  
+
+```
+
+
+
+```{r}
+#check normal distribution of score 
+ggqqplot(df$score_log, ylab = "Log(score)")
+
+```
+```{r}
+ #check normal distribution of sentiment score
+ggqqplot(df$sent.ana, ylab = "Sentiment score") 
+
+```
+
+
+
+```{r}
+#spearman correlation , non-parametric
+res <- cor.test(df$score, df$n.matches, method = "spearman")
+res
+```
+
+```{r}
+
+ggplot(df, aes(x=n.matches, y=score)) + 
+  geom_point()+
+  geom_smooth(method=lm) + ylab("Score") + xlab("Number of matches") +theme(text = element_text(size = 15))
+```
+```{r}
+#pearson correlation , parametric
+res2 <- cor.test(df$score_log, df$sent.ana, method = "pearson")
+res2
+```
+```{r}
+
+ggplot(df, aes(x=sent.ana, y=score_log)) + 
+  geom_point()+
+  geom_smooth(method=lm) + ylab(" Log[Score]") + xlab("Sentiment score") +theme(text = element_text(size = 15))
+```
+
+
+```{r}
+#recode gender from integers to categories
+df$gender[df$gender == 0] <- "Male"
+df$gender[df$gender == 1] <- "Female"
+df$gender[df$gender == 2] <- "Other"
+```
+```{r}
+
+```
+
+```{r}
+#boxplot for gender and number of matches
+ggplot(df) +
+  aes(x = gender, y = n.matches) +
+  geom_boxplot(fill = "#0c4c8a") +
+  theme_minimal()
+
+```
+
+```{r}
+#check if it follows normal distribution or not for n.matches ,males
+shapiro.test(subset(df, gender == "Male")$n.matches)
+
+```
+
+
+
+```{r}
+#check if it follows normal distribution or not for n.matches ,females
+shapiro.test(subset(df, gender == "Female")$n.matches)
+
+```
+
+```{r}
+#wilcoxon test - non parametric test 
+test <- wilcox.test(subset(df, gender != "Other")$n.matches ~ subset(df, gender != "Other")$gender)
+print(test)
+```
+
+
+
+```{r}
+#distribution of score
+hist(df$score)
+#distribution of log of score
+hist(df$score_log)
+```
+
+
+
+
+```{r}
+#linear model : log score ~ gender, n.matches_log, n_photos_log
+lm(score_log ~ gender+n.matches_log+n.photos_log, df)
+#linear model : log score ~  n.matches_log, n_photos_log, gender*photo.keke , gender*photo_beach
+lm(score_log ~ gender+n.matches_log+n.photos_log+gender*photo.keke+gender*photo.beach, df)
+#linear model : log score ~  n.matches_log, n_photos_log, gender*photo.keke , gender*photo_beach
+lm(score_log ~ gender*photo.keke+gender*photo.beach, df)
+```
+
+```{r}
+ggplot(df, aes(x=photo.keke, y=score_log, fill=gender)) + geom_boxplot() + ylab("Log of score") +xlab("Photo keke")
+
+```
+
+
+```{r}
+#anova with dependent as gender*photo.keke
+anova(lm(score_log ~ gender*photo.keke, df))
+#summary table for linear model
+summary(lm(score_log ~ gender*photo.keke, df))
+
+```
+```{r}
+#create df with numerical variables only
+cont_df <- df[c('score', 'score_log', 'n.matches', 'n.updates.photo', 'n.photos', 'sent.ana', 'length.prof')]
+
+```
+
+```{r}
+chart.Correlation(cont_df, histogram=TRUE, pch=19,method="spearman")
+```
+```{r}
+chart.Correlation(cont_df, histogram=TRUE, pch=19,method="pearson")
+
+```
+
+
+## Perform a PCA on relevant numerical variables of the dataset
+
+
+```{r}
+#perform pca , add scale = TRUE to scale data
+
+cont_df.pca <- prcomp(cont_df, center = TRUE,scale. = TRUE)
+summary(cont_df.pca)
+```
+
+
+## Table describing the loadings of each Principal Component.
+```{r}
+#get loadings
+cont_df.pca$rotation
+```
+## A variable circle of correlations
+```{r}
+#supplementary variable in blue, and color indicator : "contribution"
+fviz_pca_var(cont_df.pca, col.var = "contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
+             repel = TRUE)
+
+```
+```{r}
+#get corrplot with cos2
+var <- get_pca_var(cont_df.pca)
+corrplot(var$cos2, is.corr = FALSE)
+```
+## An individual map with a sample of individuals.
+ 
+```{r}
+#individual graph with sample of 300 individuals
+fviz_pca_ind(cont_df.pca, col.ind = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE ,# Avoid text overlapping (slow if many points),
+             select.ind = list(contrib = 500)
+)
+
+
+```
+```{r}
+# Highest contributing variables to dim 1
+fviz_contrib(cont_df.pca, choice = "var", axes = 1, top = 10)
+```
+```{r}
+# Highest contributing variables to dim 2
+fviz_contrib(cont_df.pca, choice = "var", axes = 2, top = 10)
+```
+## Biplot with a limited number of individuals
+
+```{r}
+# biplot with top 500 contributing individuals with elipses
+fviz_pca_biplot(cont_df.pca,
+                col.ind = df$gender, palette = "jco",
+                addEllipses =T, label = "var",
+                col.var = "black", repel = TRUE,
+                legend.title = "Gender",
+                select.ind = list(contrib = 500))
+```
+## Scree plots - Principal components selection
+```{r}
+#scree plot with percentage variance explained
+fviz_eig(cont_df.pca, addlabels = TRUE, ylim = c(0, 50))
+#scree plot with eigenvalues
+fviz_eig(cont_df.pca, choice = "eigenvalue", 
+         addlabels=TRUE)
+```
+
+## MCA 
+```{r}
+#selecting all categorical data and converting them to factors
+
+discrete_df <- df[c('gender', 'voyage', 'laugh', 'photo.keke', 'photo.beach')]
+
+discrete_df$gender <- as.factor(discrete_df$gender)
+discrete_df$voyage <- as.factor(discrete_df$voyage)
+discrete_df$laugh <- as.factor(discrete_df$laugh)
+discrete_df$photo.keke <- as.factor(discrete_df$photo.keke)
+discrete_df$photo.beach <- as.factor(discrete_df$photo.beach)
+head(discrete_df)
+
+
+```
+
+```{r}
+#apply MCA on categorical dataset
+discrete_df.mca <- MCA(discrete_df, graph = FALSE)
+
+```
+
+
+```{r}
+#Scree plot for MCA in percentage
+fviz_screeplot(discrete_df.mca, addlabels = TRUE, ylim = c(0, 45))
+
+
+```
+```{r}
+#mca biplot split facetted by each group
+fviz_mca_biplot(discrete_df.mca, 
+               repel = TRUE, # Avoid text overlapping (slow if many point)
+               addEllipses = TRUE,
+               habillage=colnames(discrete_df),
+            
+            ggtheme = theme_minimal())
+```
+
+
+```{r}
+# Correlation between variables and principal dimensions - MCA
+fviz_mca_var(discrete_df.mca, choice = "mca.cor", 
+            repel = TRUE, # Avoid text overlapping (slow)
+            ggtheme = theme_minimal())
+```
+```{r}
+#coordinates of each variable categories in each dimension - MCA
+fviz_mca_var(discrete_df.mca, 
+             repel = TRUE, # Avoid text overlapping (slow)
+             ggtheme = theme_minimal())
+
+```
+
+
+```{r}
+# coordinates of each variable categories in each dimension - MCA
+# Color by cos2 values: quality on the factor map
+fviz_mca_var(discrete_df.mca, col.var = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE, # Avoid text overlapping
+             ggtheme = theme_minimal())
+```
+
+```{r}
+#coordinates of each variable categories in each dimension - MCA
+# Color by contribution values
+
+fviz_mca_var(discrete_df.mca, col.var = "contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE, # Avoid text overlapping
+             ggtheme = theme_minimal())
+```
+```{r}
+#a bar plot of variable cos2
+# Cos2 of variable categories on Dim.1 and Dim.2
+fviz_cos2(discrete_df.mca, choice = "var", axes = 1:2)
+
+```
+```{r}
+#contribution of variable categories on first PC - Barplot
+fviz_contrib(discrete_df.mca, choice = "var", axes = 1)
+#contribution of variable categories on second Pc- Barplot
+fviz_contrib(discrete_df.mca, choice = "var", axes = 2)
+#contribution of variable categories on third Pc- Barplot
+fviz_contrib(discrete_df.mca, choice = "var", axes = 3)
+#contribution of variable categories on fourth Pc- Barplot
+fviz_contrib(discrete_df.mca, choice = "var", axes = 4)
+
+```
+
+
+```{r}
+# Individuals plot for MCA
+
+fviz_mca_ind(discrete_df.mca, col.ind = "contrib",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE, # Avoid text overlapping (slow if many points)
+             ggtheme = theme_minimal())
+
+```
+```{r}
+#mca biplot with variable categories + individuals - First and second PCs
+#colored by cos2 values
+fviz_mca_biplot(discrete_df.mca, col.var = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE, # Avoid text overlapping,
+             addEllipses = T,
+             ggtheme = theme_minimal())
+
+```
+```{r}
+#mca biplot with variable categories + individuals - third and fourth PCs
+#colored by cos2 values
+fviz_mca_biplot(discrete_df.mca, col.var = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+             repel = TRUE, # Avoid text overlapping,
+             addEllipses = T,
+             axes=3:4,
+             ggtheme = theme_minimal())
+
+```
+
+## K-means
+```{r}
+
+
+#apply k-means starting with k = 3
+set.seed(123)
+res.km <- kmeans(scale(cont_df), 3, nstart = 25)
+
+# Apply pca on continuous variables to reduce dimension
+res.pca <- prcomp(cont_df,  scale = TRUE)
+#coordinates of individuals
+ind.coord <- as.data.frame(get_pca_ind(res.pca)$coord)
+#Add clusters obtained by k-means
+ind.coord$cluster <- factor(res.km$cluster)
+
+#Add groups of gender obtained from initial dataframe
+ind.coord$gender <- df$gender
+# Inspect data
+head(ind.coord)
+
+```
+
+```{r}
+#get eigenvalues
+eigenvalue <- round(get_eigenvalue(cont_df.pca), 1)
+#get variance percentage from eigenvalues
+
+variance.percent <- eigenvalue$variance.percent
+#plot k-means clusters with individual points
+ggscatter(
+  ind.coord, x = "Dim.1", y = "Dim.2", 
+  color = "cluster", palette = "npg", ellipse = TRUE, ellipse.type = "convex",
+  shape = "gender", size = 1.5,  legend = "right", ggtheme = theme_bw(),
+  xlab = paste0("Dim 1 (", variance.percent[1], "% )" ),
+  ylab = paste0("Dim 2 (", variance.percent[2], "% )" )
+) +
+  stat_mean(aes(color = cluster), size = 4)
+
+```
+
+## Optimal number of clusters - k-means
+```{r}
+#scale df
+scaled_contdf <- scale(cont_df)
+
+# Elbow method
+fviz_nbclust(scaled_contdf, kmeans, method = "wss") +
+  geom_vline(xintercept = 4, linetype = 2)+
+  labs(subtitle = "Elbow method")
+# Silhouette method
+fviz_nbclust(scaled_contdf, kmeans, method = "silhouette")+
+  labs(subtitle = "Silhouette method")
+
+
+#use majority rule of 30 indices to get optimal number of clusters
+nb <- NbClust(scaled_contdf, distance = "euclidean", min.nc = 2,
+              max.nc = 7, method = "kmeans")
+fviz_nbclust(nb)
+```
+```{r}
+# optimal number of clusters, k = 2
+# re-plot clusters with k = 2
+set.seed(123)
+res.km2 <- kmeans(scale(cont_df), 2, nstart = 25)
+
+
+#coordinates of individuals
+ind.coord2 <- as.data.frame(get_pca_ind(res.pca)$coord)
+#Add clusters obtained by k-means
+ind.coord2$cluster <- factor(res.km2$cluster)
+
+#Add groups of gender obtained from initial dataframe
+ind.coord2$gender <- df$gender
+
+ggscatter(
+  ind.coord2, x = "Dim.1", y = "Dim.2", 
+  color = "cluster", palette = "npg", ellipse = TRUE, ellipse.type = "convex",
+  shape = "gender", size = 1.5,  legend = "right", ggtheme = theme_bw(),
+  xlab = paste0("Dim 1 (", variance.percent[1], "% )" ),
+  ylab = paste0("Dim 2 (", variance.percent[2], "% )" )
+) +
+  stat_mean(aes(color = cluster), size = 4)
+
+
+```
+
+
+```{r}
+#display cluster centers for each variable
+res.km2$centers
+
+```
+
+
+
+
+## HCPC
+```{r}
+
+# Compute PCA with ncp = 3(principal components)
+res.pca <- PCA(scaled_contdf, ncp = 3, graph = FALSE)
+# Compute hierarchical clustering on principal components
+res.hcpc <- HCPC(res.pca, graph = FALSE)
+#dendogram
+#fviz_dend(res.hcpc,
+#          cex = 0.5, # Label size
+#          palette = "jco", # Color palette see ?ggpubr::ggpar
+#          rect = TRUE, rect_fill = TRUE, # Add rectangle around groups
+#          rect_border = "jco", # Rectangle color
+#          labels_track_height = 0.8 # Augment the room for labels
+#)"
+
+```
+
+
+
+```{r}
+#applying PCA to continuous variables
+res.pca <- PCA(cont_df, graph = FALSE,scale=TRUE)
+#applying HCPC
+hcpc <- HCPC(res.pca, min = 3, max = NULL, nb.clust = -1)
+# Principal components with 3D map, choice and tree option
+
+plot(hcpc, choice="map")
+
+plot(hcpc, choice="tree")
+
+plot(hcpc, choice="bar")
+
+```
+```{r}
+fviz_dend(res.hcpc,repel=TRUE)  
+```
+
+
+```{r}
+# to visualize individuals on the principal component map and to color individuals according to the cluster they belong to.
+
+fviz_cluster(res.hcpc,
+             repel = TRUE, # Avoid label overlapping
+             show.clust.cent = TRUE, # Show cluster centers
+             palette = "jco", # Color palette see ?ggpubr::ggpar
+             ggtheme = theme_minimal(),
+             main = "Factor map"
+)
+```
+
+```{r}
+#check which variables are associated to which clusters
+list_t <- (res.hcpc$desc.var$quanti)
+```
+
+```{r}
+list_t
+```
+
+```{r}
+#generate xtable
+#xtable(do.call(rbind.data.frame, list_t ))
+
+```
+
